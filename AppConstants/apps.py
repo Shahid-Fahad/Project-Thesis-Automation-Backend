@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class FilesConfig(AppConfig):
+class AppconstantsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'Files'
+    name = 'AppConstants'

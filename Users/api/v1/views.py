@@ -2,18 +2,22 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView, UpdateAPIView
 from django.contrib.auth import authenticate, login
+from rest_framework.parsers import MultiPartParser
 from django.contrib.auth.models import User
 from Users.models import Student, Supervisor, Group
+from AppConstants.models import Notice
 from .serializers import (
     StudentRegistrationSerializer, LoginSerializer, StudentListSerializer,
-                         GroupCreateSerializer, SupervisorListSerializer,GroupCreateSerializer, GroupSerializer
-                    )
+    CommentSerializer,GroupCreateSerializer, SupervisorListSerializer,GroupCreateSerializer, GroupSerializer,
+    FileSerializer, StudentMarkSerializer, NoticeSerializer
+)
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import logout
 from django.shortcuts import get_object_or_404
+from Users.permissions import IsGroupSupervisor
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -48,8 +52,13 @@ class LogoutView(APIView):
     
 class StudentListAPIView(ListAPIView):
     pagination_class = None
-    queryset = Student.objects.all()
     serializer_class = StudentListSerializer
+
+    def get_queryset(self):
+        # Filter out students who are already in a group
+        students_in_group = Group.objects.values_list('students', flat=True)
+        queryset = Student.objects.exclude(id__in=students_in_group)
+        return queryset
 
 class SupervisorListAPIView(ListAPIView):
     pagination_class = None
@@ -72,7 +81,11 @@ class GroupCreateView(APIView):
             }, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+class GroupRetrieveAPIView(RetrieveAPIView):
+    queryset = Group.objects.all()
+    serializer_class = GroupSerializer
+    permission_classes = [IsAuthenticated]  # Adjust based on your requirements
 
 class AcceptGroupAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -168,3 +181,68 @@ class UserInfoAPIView(APIView):
 
         # Default response if user is neither
         return Response({"error": "User is neither a student nor a supervisor"}, status=400)
+    
+class UploadCommentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, group_id):
+        try:
+            group = Group.objects.get(id=group_id)
+        except Group.DoesNotExist:
+            return Response({"error": "Group not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Associate comment with the user and group
+        serializer = CommentSerializer(data=request.data)
+        if serializer.is_valid():
+            comment = serializer.save(user=request.user)  # Automatically sets the user
+            group.comments.add(comment)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, group_id):
+        try:
+            group = Group.objects.get(id=group_id)
+        except Group.DoesNotExist:
+            return Response({"error": "Group not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Associate comment with the user and group
+        serializer = CommentSerializer(data=request.data)
+        if serializer.is_valid():
+            comment = serializer.save(user=request.user)
+            group.comments.add(comment)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class UploadFileView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = FileSerializer
+
+    def post(self, request, group_id):
+        try:
+            group = Group.objects.get(id=group_id)
+        except Group.DoesNotExist:
+            return Response({"error": "Group not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Validate and save the file
+        serializer = FileSerializer(data=request.data)
+        if serializer.is_valid():
+            file_instance = serializer.save()  # This will save the file to S3
+            group.files.add(file_instance)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class UpdateStudentMarkView(UpdateAPIView):
+    queryset = Student.objects.all()
+    serializer_class = StudentMarkSerializer
+    permission_classes = [IsGroupSupervisor]
+
+    def patch(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+    
+class NoticeListAPIView(ListAPIView):
+    serializer_class = NoticeSerializer
+    queryset = Notice.objects.all()
+    pagination_class = None

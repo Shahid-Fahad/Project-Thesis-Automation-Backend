@@ -37,7 +37,7 @@ class GroupAdmin(admin.ModelAdmin):
                 if first_choice_supervisor:
                     # Add the group to the supervisor's requested_groups field
                     first_choice_supervisor.requested_groups.add(group)
-                    self.message_user(request, f"Assigned group '{group}' to supervisor '{first_choice_supervisor.name}'.")
+                    self.message_user(request, f"Sent assigning request for '{group}' to supervisor '{first_choice_supervisor.name}'.")
                 else:
                     self.message_user(request, f"Group '{group}' has no supervisor choices.", level="warning")
             except ObjectDoesNotExist:

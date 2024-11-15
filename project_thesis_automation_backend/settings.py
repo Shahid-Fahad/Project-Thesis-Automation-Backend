@@ -11,9 +11,21 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
-
+import os
+from dotenv import load_dotenv  # Import load_dotenv from python-dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Access environment variables
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME')
 
 
 # Quick-start development settings - unsuitable for production
@@ -41,7 +53,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'Users',
-    'Files'
+    'AppConstants',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -97,6 +110,16 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.TokenAuthentication',
     ),
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',  # Enables HTML form view in DRF
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.MultiPartParser',  # Allows handling of file uploads
+        'rest_framework.parsers.FormParser',  # Allows parsing of form data
+    ],
+
 }
 
 
