@@ -4,7 +4,7 @@ from .views import (
     RegisterView, LoginView, LogoutView,StudentListAPIView,SupervisorListAPIView,GroupCreateView,
     RequestedGroupsAPIView,AcceptGroupAPIView,RejectGroupAPIView,UserInfoAPIView,
     UploadCommentView, UploadFileView,GroupRetrieveAPIView, UpdateStudentMarkView,
-    NoticeListAPIView
+    NoticeListAPIView, StatusUpdateAPIView
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -20,6 +20,7 @@ urlpatterns = [
     path('groups/create/', GroupCreateView.as_view(), name='group-create'),
      path('groups/requested/', RequestedGroupsAPIView.as_view(), name='requested-groups'),
     path('groups/<int:group_id>/accept/', AcceptGroupAPIView.as_view(), name='accept-group'),
+    path('groups/<int:pk>/update-status/', StatusUpdateAPIView.as_view(), name='status-update'),
     path('groups/<int:group_id>/reject/', RejectGroupAPIView.as_view(), name='reject-group'),
     path('user-info/', UserInfoAPIView.as_view(), name='user-info'),
     path('groups/<int:group_id>/upload-comment/', UploadCommentView.as_view(), name='upload-comment'),

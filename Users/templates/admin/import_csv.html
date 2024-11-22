@@ -1,0 +1,8 @@
+<!-- templates/admin/import_csv.html -->
+{% extends "admin/base_site.html" %} {% block content %}
+<h2>Import Students from CSV</h2>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %} {{ form.as_p }}
+  <button type="submit" class="button">Upload</button>
+</form>
+{% endblock %}

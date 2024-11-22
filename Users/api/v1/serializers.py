@@ -1,7 +1,7 @@
 # serializers.py
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from Users.models import Student,Supervisor,Group,Comment,Files
+from Users.models import Student,Supervisor,Group,Comment,Files,Board
 import boto3
 from django.conf import settings
 from AppConstants.models import (
@@ -46,7 +46,10 @@ class StudentListSerializer(serializers.ModelSerializer):
             'name',
             'matric_id',
             'cgpa',
-            'obtained_marks'
+            'obtained_marks',
+            'pre_defense_marks',
+            'supervisor_marks',
+            'external_marks',
         ]
     
 class GroupCreateSerializer(serializers.ModelSerializer):
@@ -99,7 +102,7 @@ class CommentSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = Comment
-        fields = ['id', 'username', 'text']
+        fields = ['id', 'username', 'text','comment_type']
     def get_username(self,obj:Comment):
         if Supervisor.objects.filter(user=obj.user).exists():
             return Supervisor.objects.filter(user=obj.user).first().name
@@ -152,6 +155,16 @@ class FileSerializer(serializers.ModelSerializer):
         file_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{file_name}"
         return file_url
 
+class BoardSerializer(serializers.ModelSerializer):
+    board_members = SupervisorListSerializer(many=True,read_only=True)
+    board_chairmen = SupervisorListSerializer(read_only=True)
+    
+    class Meta:
+        model = Board
+        fields = [
+            'board_members',
+            'board_chairmen',
+        ]
 
 class GroupSerializer(serializers.ModelSerializer):
     students = StudentListSerializer(many=True, read_only=True)
@@ -163,6 +176,11 @@ class GroupSerializer(serializers.ModelSerializer):
     proposal_deadline_date = serializers.SerializerMethodField()
     pre_defence_deadline_date = serializers.SerializerMethodField()
     defence_deadline_date = serializers.SerializerMethodField()
+    proposal_board = BoardSerializer(read_only=True)
+    pre_defense_board = BoardSerializer(read_only=True)
+    defense_board =BoardSerializer(read_only=True)
+    is_supervisor = serializers.SerializerMethodField()
+    is_board_charimen = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
@@ -179,11 +197,33 @@ class GroupSerializer(serializers.ModelSerializer):
             'files',
             'proposal_deadline_date',
             'pre_defence_deadline_date',
-            'defence_deadline_date'
+            'defence_deadline_date',
+            "proposal_board" ,
+            "pre_defense_board" ,
+            "defense_board" ,
+            "is_proposal_accepted", 
+            "is_pre_defense_accepted",
+            "is_defense_accepted",
+            "is_supervisor",
+            "is_board_charimen",
         ]
     def get_average_cgpa(self,obj:Group):
         return obj.average_cgpa()
     
+    def get_is_supervisor(self,obj:Group):
+        user = self.context['request'].user
+        if obj.supervisor and user == obj.supervisor.user:
+            return True
+        else: 
+            return False
+    
+    def get_is_board_charimen(self,obj:Group):
+        user = self.context['request'].user
+        if obj.pre_defense_board and user == obj.pre_defense_board.board_chairmen.user:
+            return True
+        else:
+            return False
+
     def get_pre_defence_deadline_date(self,obj:Group):
         return Constants.get_pre_defence_deadline()
     def get_proposal_deadline_date(self,obj:Group):
@@ -195,13 +235,28 @@ class GroupSerializer(serializers.ModelSerializer):
 class StudentMarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
-        fields = ['obtained_marks']
+        fields = [ 'supervisor_marks', 'pre_defense_marks']
         
     def update(self, instance, validated_data):
-        instance.obtained_marks = validated_data.get('obtained_marks', instance.obtained_marks)
+        # Update each mark field if present in the validated data
+        instance.supervisor_marks = validated_data.get('supervisor_marks', instance.supervisor_marks)
+        instance.pre_defense_marks = validated_data.get('pre_defense_marks', instance.pre_defense_marks)
         instance.save()
         return instance
     
+class StatusUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['is_proposal_accepted','is_pre_defense_accepted','is_defense_accepted']
+        
+        def update(self, instance, validated_data):
+            instance.is_proposal_accepted = validated_data.get('is_proposal_accepted',instance.is_proposal_accepted)
+            instance.is_pre_defense_accepted = validated_data.get('is_pre_defense_accepted',instance.is_pre_defense_accepted)
+            instance.is_defense_accepted = validated_data.get('is_defense_accepted',instance.is_defense_accepted)
+            instance.save()
+            return instance
+            
+
 class NoticeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notice

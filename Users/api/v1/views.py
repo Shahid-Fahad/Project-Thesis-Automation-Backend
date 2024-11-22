@@ -7,17 +7,17 @@ from django.contrib.auth import authenticate, login
 from rest_framework.parsers import MultiPartParser
 from django.contrib.auth.models import User
 from Users.models import Student, Supervisor, Group
-from AppConstants.models import Notice
+from AppConstants.models import Notice, Constants
 from .serializers import (
     StudentRegistrationSerializer, LoginSerializer, StudentListSerializer,
     CommentSerializer,GroupCreateSerializer, SupervisorListSerializer,GroupCreateSerializer, GroupSerializer,
-    FileSerializer, StudentMarkSerializer, NoticeSerializer
+    FileSerializer, StudentMarkSerializer, NoticeSerializer, StatusUpdateSerializer
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import logout
 from django.shortcuts import get_object_or_404
-from Users.permissions import IsGroupSupervisor
+from Users.permissions import IsSupervisorOrBoardChairmenOfGroup, IsSupervisorOrBoardChairmenOfStudent
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -94,12 +94,15 @@ class AcceptGroupAPIView(APIView):
         try:
             supervisor = Supervisor.objects.get(user=request.user)
             group = supervisor.requested_groups.get(id=group_id)
-            
             group.supervisor = supervisor
             group.save()
-
-            # Remove the group from the supervisor's requested_groups
             supervisor.requested_groups.remove(group)
+            number_of_groups_assigned_to_supervisor =  Group.objects.filter(supervisor=supervisor).count()
+            
+            if number_of_groups_assigned_to_supervisor == Constants.get_maximum_number_of_group_per_supervisor():
+                supervisor.requested_groups.set([])
+                supervisor.save()
+        
             
             return Response({"detail": "Group accepted successfully."}, status=status.HTTP_200_OK)
         except Supervisor.DoesNotExist:
@@ -140,7 +143,7 @@ class RequestedGroupsAPIView(APIView):
     def get(self, request):
         supervisor = Supervisor.objects.get(user=request.user.id)
         requested_groups = supervisor.requested_groups.all()
-        serializer = GroupSerializer(requested_groups, many=True)
+        serializer = GroupSerializer(requested_groups, many=True, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     
 class UserInfoAPIView(APIView):
@@ -156,7 +159,7 @@ class UserInfoAPIView(APIView):
 
             if group:
                 if group.supervisor:
-                    group_data = GroupSerializer(group).data
+                    group_data = GroupSerializer(group, context={"request": request}).data
                 else:
                     group_data = {"status": "Pending assignment to a supervisor"}
             else:
@@ -171,11 +174,28 @@ class UserInfoAPIView(APIView):
         elif hasattr(user, 'supervisor'):
             supervisor = get_object_or_404(Supervisor, user=user)
             groups = Group.objects.filter(supervisor=supervisor)
-            groups_data = GroupSerializer(groups, many=True).data
+            groups_data = GroupSerializer(groups, many=True, context={"request": request}).data
+            proposal_board_groups = Group.objects.filter(proposal_board__board_members=supervisor)
+            proposal_board_data = []
+            for group in proposal_board_groups:
+                proposal_board_data.append(GroupSerializer(group, context={"request": request}).data)
+            
+            pre_defense_board_groups = Group.objects.filter(pre_defense_board__board_members=supervisor)
+            pre_defense_board_data = []
+            for group in pre_defense_board_groups:
+                pre_defense_board_data.append(GroupSerializer(group, context={"request": request}).data)
+            
+            defense_board_groups = Group.objects.filter(defense_board__board_members=supervisor)
+            defense_board_data = []
+            for group in defense_board_groups:
+                defense_board_data.append(GroupSerializer(group, context={"request": request}).data)
 
             supervisor_data = SupervisorListSerializer(supervisor).data
             supervisor_data['groups'] = groups_data
             supervisor_data['dept'] = supervisor.dept
+            supervisor_data['proposal_board_groups'] = proposal_board_data
+            supervisor_data['pre_defense_board_groups'] = pre_defense_board_data
+            supervisor_data['defense_board_groups'] = defense_board_data
             supervisor_data['has_request'] = True if supervisor.requested_groups.count()>0 else False
             return Response(supervisor_data)
 
@@ -237,12 +257,30 @@ class UploadFileView(APIView):
 class UpdateStudentMarkView(UpdateAPIView):
     queryset = Student.objects.all()
     serializer_class = StudentMarkSerializer
-    permission_classes = [IsGroupSupervisor]
+    permission_classes = [IsSupervisorOrBoardChairmenOfStudent]
 
     def patch(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs)
     
+class StatusUpdateAPIView(UpdateAPIView):
+    queryset = Group.objects.all()
+    serializer_class = StatusUpdateSerializer
+    permission_classes = [IsSupervisorOrBoardChairmenOfGroup]
+    
+    def patch(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
 class NoticeListAPIView(ListAPIView):
     serializer_class = NoticeSerializer
     queryset = Notice.objects.all()
     pagination_class = None
+
+class BoardListAPIView(ListAPIView):
+    pagination_class = None
+    serializer_class = StudentListSerializer
+
+    def get_queryset(self):
+        # Filter out students who are already in a group
+        students_in_group = Group.objects.values_list('students', flat=True)
+        queryset = Student.objects.exclude(id__in=students_in_group)
+        return queryset

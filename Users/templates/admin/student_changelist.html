@@ -1,0 +1,11 @@
+<!-- templates/admin/student_changelist.html -->
+{% extends "admin/change_list.html" %} {% block content %}
+<div>
+  <a href="{% url 'admin:import_csv' %}" class="button"
+    >Import Students from CSV</a
+  >
+  <a href="{% url 'admin:import_marks' %}" class="button"
+    >Import External Marks from CSV</a
+  >
+</div>
+{{ block.super }} {% endblock %}
